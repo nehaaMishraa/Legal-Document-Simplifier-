@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Legal Document Simplifier</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" xintegrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        #original-output-container, #summary-output-container {
+            height: 70vh;
+        }
+        .spinner-border {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+        .summary-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        .summary-key {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.25rem;
+        }
+        .summary-value {
+            color: #212529;
+        }
+        .nested-list {
+            padding-left: 1.25rem;
+            list-style-type: none;
+            margin-top: 0.5rem;
+        }
+        .nested-object {
+            padding-left: 1rem;
+            border-left: 2px solid #e9ecef;
+            margin-top: 0.5rem;
+        }
+        /* Styles for the formatted detailed summary output */
+        .tab-pane h1, .tab-pane h2, .tab-pane h3 {
+            margin-top: 1.25rem;
+            margin-bottom: 0.75rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .tab-pane ul {
+            padding-left: 1.5rem;
+        }
+        .tab-pane li {
+            margin-bottom: 0.5rem;
+        }
+        .tab-pane p {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container py-4 py-md-5">
+        <header class="text-center mb-5">
+            <h1 class="display-5 fw-bold text-dark">Legal Document Simplifier</h1>
+            <p class="text-muted fs-5 mt-2">Understand your rights, responsibilities, and next steps for any legal document.</p>
+        </header>
+
+        <div class="card shadow-sm border-light rounded-4 p-4 mb-5">
+            <div class="card-body">
+                <h2 class="h4 fw-semibold mb-4">Get Started</h2>
+                <div class="row g-3 align-items-end">
+                    <div class="col-12">
+                        <label for="api-key-input" class="form-label small fw-medium">Your Google AI API Key</label>
+                        <input type="password" id="api-key-input" class="form-control" placeholder="Enter your API Key here">
+    
+                    </div>
+                    <div class="col-md">
+                        <label for="doc-upload" class="form-label small fw-medium">1. Upload Document</label>
+                        <input type="file" id="doc-upload" class="form-control" accept=".txt,.md,.pdf">
+                    </div>
+                    <div class="col-md-auto">
+                        <label class="form-label small fw-medium">2. Analysis Type</label>
+                        <div id="analysis-type-selector" class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="analysisType" id="keyInfo" autocomplete="off" checked>
+                            <label class="btn btn-outline-primary" for="keyInfo">Key Info</label>
+
+                            <input type="radio" class="btn-check" name="analysisType" id="detailedSummary" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="detailedSummary">Detailed Summary</label>
+                        </div>
+                    </div>
+                    <div class="col-md-auto">
+                        <label for="language-select" class="form-label small fw-medium">3. Language</label>
+                        <select id="language-select" class="form-select">
+                            <option value="en">Simple English</option>
+                            <option value="hi">Hindi</option>
+                        </select>
+                    </div>
+                    <div class="col-md-auto mt-4 mt-md-0">
+                        <button id="simplify-btn" class="btn btn-primary w-100 fw-bold py-2 px-4 d-flex align-items-center justify-content-center">
+                            <span id="btn-text">Analyze</span>
+                            <div id="loading-spinner" class="spinner-border text-light ms-2 d-none" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <main id="main-content" class="d-none row g-4">
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-light rounded-4 h-100">
+                    <div class="card-body d-flex flex-column">
+                        <ul class="nav nav-tabs nav-fill mb-3" id="myTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary-pane" type="button" role="tab">Summary</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="rights-tab" data-bs-toggle="tab" data-bs-target="#rights-pane" type="button" role="tab">Rights & Obligations</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="steps-tab" data-bs-toggle="tab" data-bs-target="#steps-pane" type="button" role="tab">Next Steps</button>
+                            </li>
+                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="authority-tab" data-bs-toggle="tab" data-bs-target="#authority-pane" type="button" role="tab">Authority Finder</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content flex-grow-1" id="myTabContent">
+                            <div class="tab-pane fade show active" id="summary-pane" role="tabpanel">
+                                <div id="summary-output" class="overflow-y-auto" style="height: 60vh;"></div>
+                            </div>
+                            <div class="tab-pane fade" id="rights-pane" role="tabpanel">
+                                <div id="rights-output" class="overflow-y-auto" style="height: 60vh;"></div>
+                            </div>
+                            <div class="tab-pane fade" id="steps-pane" role="tabpanel">
+                                <div id="steps-output" class="overflow-y-auto" style="height: 60vh;"></div>
+                            </div>
+                             <div class="tab-pane fade" id="authority-pane" role="tabpanel">
+                                <div id="authority-output" class="overflow-y-auto" style="height: 60vh;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-light rounded-4 h-100">
+                     <div class="card-header bg-white p-3">
+                        <h2 class="h4 fw-bold mb-0">Original Document</h2>
+                    </div>
+                    <div id="original-output-container" class="card-body overflow-y-auto">
+                        <pre id="original-output" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" xintegrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    
+    <script>
+        // --- DOM Elements ---
+        const apiKeyInput = document.getElementById('api-key-input');
+        const docUpload = document.getElementById('doc-upload');
+        const simplifyBtn = document.getElementById('simplify-btn');
+        const mainContent = document.getElementById('main-content');
+        const originalOutput = document.getElementById('original-output');
+        const languageSelect = document.getElementById('language-select');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const btnText = document.getElementById('btn-text');
+        
+        const summaryOutput = document.getElementById('summary-output');
+        const rightsOutput = document.getElementById('rights-output');
+        const stepsOutput = document.getElementById('steps-output');
+        const authorityOutput = document.getElementById('authority-output');
+
+
+        let originalText = '';
+        
+        // --- Event Listeners ---
+        docUpload.addEventListener('change', handleFileUpload);
+        simplifyBtn.addEventListener('click', handleSimplify);
+
+        // --- Functions ---
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            const reader = new FileReader();
+            if (fileExtension === 'pdf') {
+                reader.onload = async (e) => {
+                    const pdfData = new Uint8Array(e.target.result);
+                    const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                    let fullText = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        fullText += textContent.items.map(item => item.str).join(' ') + '\n\n';
+                    }
+                    updateOriginalText(fullText);
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.onload = (e) => updateOriginalText(e.target.result);
+                reader.readAsText(file);
+            }
+        }
+        
+        function updateOriginalText(text) {
+            originalText = text;
+            originalOutput.textContent = text;
+            mainContent.classList.remove('d-none');
+            const placeholder = '<p class="text-muted">Ready to analyze. Click the button above.</p>';
+            summaryOutput.innerHTML = placeholder;
+            rightsOutput.innerHTML = placeholder;
+            stepsOutput.innerHTML = placeholder;
+            authorityOutput.innerHTML = placeholder;
+        }
+
+        async function handleSimplify() {
+            const apiKey = apiKeyInput.value;
+            if (!apiKey || !originalText) {
+                alert("Please provide an API key and upload a document first.");
+                return;
+            }
+
+            setLoading(true);
+            const placeholder = '<p class="text-muted">AI is analyzing the document...</p>';
+            summaryOutput.innerHTML = placeholder;
+            rightsOutput.innerHTML = placeholder;
+            stepsOutput.innerHTML = placeholder;
+            authorityOutput.innerHTML = placeholder;
+
+            try {
+                // **NEW LOGIC: Call each function sequentially**
+                await fetchAndRenderSummary();
+                await fetchAndRenderRights();
+                await fetchAndRenderSteps();
+                await fetchAndRenderAuthority();
+            } catch (error) {
+                console.error("An error occurred during the analysis process:", error);
+                const errorHtml = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
+                summaryOutput.innerHTML = errorHtml;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Generic function to call the API
+        async function callGeminiAPI(prompt, responseMimeType = "text/plain") {
+            const apiKey = apiKeyInput.value;
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { 
+                    responseMimeType: responseMimeType,
+                    temperature: 0
+                }
+            };
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result?.error?.message || `HTTP error! status: ${response.status}`);
+            }
+            if (result.candidates && result.candidates[0].content.parts.length > 0) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error("Received an empty or invalid response from the API.");
+            }
+        }
+
+        // --- Functions for each tab ---
+
+        async function fetchAndRenderSummary() {
+            const selectedLanguage = languageSelect.value;
+            const analysisType = document.querySelector('input[name="analysisType"]:checked').id;
+            let prompt, responseMimeType;
+
+            if (analysisType === 'keyInfo') {
+                responseMimeType = "application/json";
+                if (selectedLanguage === 'hi') {
+                    prompt = `
+                    निम्नलिखित कानूनी दस्तावेज़ का विश्लेषण करें। प्रत्येक बिंदु के लिए मुख्य जानकारी निकालें और हिंदी में एक सरल स्पष्टीकरण प्रदान करें।
+                    आपका आउटपुट एक एकल, वैध JSON ऑब्जेक्ट होना चाहिए जहाँ कुंजी (keys) और मान (values) दोनों हिंदी में हों।
+                    JSON ऑब्जेक्ट में निम्नलिखित फ़ील्ड के लिए हिंदी में कुंजी होनी चाहिए, यदि वे दस्तावेज़ में मौजूद हैं: "दस्तावेज़ का प्रकार", "शिकायतकर्ता की जानकारी", "आरोपी की जानकारी", "घटना का सारांश", "घटना की तारीख", "रिपोर्ट की तारीख", "स्थान", "कानून की धाराएं", "महत्वपूर्ण अवलोकन"।
+                    यदि कोई फ़ील्ड मौजूद नहीं है, तो उसे JSON से हटा दें।
+                    Document: --- ${originalText} ---`;
+                } else {
+                    prompt = `
+                    Analyze the following legal document and extract the key information.
+                    Your output MUST be a single, valid JSON object where the keys are in camelCase (e.g., "documentType") and the values are simple strings or an array of strings.
+                    The JSON object should have keys for the following fields, if they are present in the document: "documentType", "complainantInfo", "accusedInfo", "incidentSummary", "incidentDate", "reportDate", "location", "sectionsOfLaw", "criticalObservation".
+                    For "complainantInfo" and "accusedInfo", combine all details into a single descriptive string.
+                    For "sectionsOfLaw", return an array of strings.
+                    If a field is not present, omit the key from the JSON.
+                    Document: --- ${originalText} ---`;
+                }
+                const jsonText = await callGeminiAPI(prompt, responseMimeType);
+                renderKeyInfo(JSON.parse(jsonText));
+            } else { // detailedSummary
+                responseMimeType = "text/plain";
+                prompt = `
+                You are an expert legal assistant. Provide a detailed, comprehensive summary of the following document in ${selectedLanguage === 'hi' ? 'Hindi' : 'Simple English'}.
+                The summary should be well-structured with clear headings for different sections (like "Complainant Details", "Incident Details", "Laws Invoked", etc.).
+                Under each heading, present the specific details as a bulleted list.
+                Make it easy for a non-lawyer to read and understand.
+                Format the entire output using Markdown.
+                Document: --- ${originalText} ---`;
+                const markdownText = await callGeminiAPI(prompt, responseMimeType);
+                renderDetailedSummary(markdownText);
+            }
+        }
+
+        async function fetchAndRenderRights() {
+            rightsOutput.innerHTML = '<p class="text-muted">Fetching Rights & Obligations...</p>';
+            const selectedLanguage = languageSelect.value === 'hi' ? 'Hindi' : 'Simple English';
+            const prompt = `Based on the following document, list the user's rights and their obligations/responsibilities. Provide the output in ${selectedLanguage}. Format the output as a JSON object with two keys (in English): "rights" and "obligations". Each key should have an array of strings as its value. If there are no rights or obligations, provide an empty array. Document: --- ${originalText} ---`;
+            const jsonText = await callGeminiAPI(prompt, "application/json");
+            renderRightsAndObligations(JSON.parse(jsonText));
+        }
+
+        async function fetchAndRenderSteps() {
+            stepsOutput.innerHTML = '<p class="text-muted">Generating Next Steps...</p>';
+            const selectedLanguage = languageSelect.value === 'hi' ? 'Hindi' : 'Simple English';
+            const prompt = `Based on the following document, provide a numbered list of actionable next steps for a common person with no legal knowledge. Provide the output in ${selectedLanguage}. Format the output as a Markdown numbered list. Document: --- ${originalText} ---`;
+            const markdownText = await callGeminiAPI(prompt);
+            renderNextSteps(markdownText);
+        }
+
+        async function fetchAndRenderAuthority() {
+            authorityOutput.innerHTML = '<p class="text-muted">Finding Relevant Authority...</p>';
+            const selectedLanguage = languageSelect.value === 'hi' ? 'Hindi' : 'Simple English';
+            const prompt = `Based on the location and context of the following document, identify the relevant local authority a person might need to contact. Provide their name, address, and website if possible. Provide the output in ${selectedLanguage}. Format as a JSON object with keys (in English) "name", "address", "website". If not applicable, return a JSON object with a single key "name" and value "Not applicable for this document type.". Document: --- ${originalText} ---`;
+            const jsonText = await callGeminiAPI(prompt, "application/json");
+            renderAuthorityFinder(JSON.parse(jsonText));
+        }
+        
+        // --- RENDER FUNCTIONS ---
+        
+        function renderDetailedSummary(markdownText) {
+            summaryOutput.innerHTML = marked.parse(markdownText);
+        }
+
+        function renderKeyInfo(data) {
+            summaryOutput.innerHTML = '';
+            const formatKey = (key) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+            const cleanText = (text) => String(text).replace(/\*/g, '');
+
+            for (const key in data) {
+                const value = data[key];
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'summary-item';
+                const keyDiv = document.createElement('div');
+                keyDiv.className = 'summary-key';
+                keyDiv.textContent = languageSelect.value === 'hi' ? key : formatKey(key);
+                itemDiv.appendChild(keyDiv);
+
+                if (Array.isArray(value)) {
+                    const list = document.createElement('ul');
+                    list.className = 'nested-list';
+                    value.forEach((item, index) => {
+                        const li = document.createElement('li');
+                        li.textContent = `${index + 1}: ${cleanText(item)}`;
+                        list.appendChild(li);
+                    });
+                    itemDiv.appendChild(list);
+                } else if (typeof value === 'object' && value !== null) {
+                    const nestedDiv = document.createElement('div');
+                    nestedDiv.className = 'nested-object';
+                    for (const nestedKey in value) {
+                        const p = document.createElement('p');
+                        p.className = 'mb-1';
+                        p.innerHTML = `<strong class="text-capitalize">${languageSelect.value === 'hi' ? nestedKey : formatKey(nestedKey)}:</strong> ${cleanText(value[nestedKey])}`;
+                        nestedDiv.appendChild(p);
+                    }
+                    itemDiv.appendChild(nestedDiv);
+                } else {
+                    const valueDiv = document.createElement('div');
+                    valueDiv.className = 'summary-value';
+                    valueDiv.textContent = cleanText(value);
+                    itemDiv.appendChild(valueDiv);
+                }
+                
+                const criticalObservationKey = languageSelect.value === 'hi' ? 'महत्वपूर्ण अवलोकन' : 'criticalObservation';
+                if (key === criticalObservationKey && String(value).toLowerCase() !== 'none noted.' && String(value).toLowerCase() !== 'कोई नहीं।') {
+                    itemDiv.classList.add('bg-warning-subtle');
+                }
+                summaryOutput.appendChild(itemDiv);
+            }
+        }
+        
+        function renderRightsAndObligations(data) {
+             if (!data) {
+                rightsOutput.innerHTML = '<p class="text-muted">No specific rights or obligations were identified.</p>';
+                return;
+            }
+            let html = '';
+            const rightsKey = 'rights';
+            const obligationsKey = 'obligations';
+
+            const rightsTitle = languageSelect.value === 'hi' ? 'आपके अधिकार' : 'Your Rights';
+            const obligationsTitle = languageSelect.value === 'hi' ? 'आपकी जिम्मेदारियां' : 'Your Responsibilities';
+
+            if (data[rightsKey] && data[rightsKey].length > 0) {
+                html += `<h3>${rightsTitle}</h3><ul>`;
+                data[rightsKey].forEach(item => { html += `<li>${item}</li>`; });
+                html += `</ul>`;
+            }
+            if (data[obligationsKey] && data[obligationsKey].length > 0) {
+                html += `<h3>${obligationsTitle}</h3><ul>`;
+                data[obligationsKey].forEach(item => { html += `<li>${item}</li>`; });
+                html += `</ul>`;
+            }
+            rightsOutput.innerHTML = marked.parse(html);
+        }
+
+        function renderNextSteps(markdownText) {
+            stepsOutput.innerHTML = marked.parse(markdownText);
+        }
+        
+        function renderAuthorityFinder(data) {
+            if (!data) { authorityOutput.innerHTML = '<p class="text-muted">No relevant authority identified.</p>'; return; }
+            if (data.name && data.name.toLowerCase().includes('not applicable')) {
+                authorityOutput.innerHTML = `<p>${data.name}</p>`;
+                return;
+            }
+            let html = `<h3>${languageSelect.value === 'hi' ? 'संबंधित प्राधिकरण' : 'Relevant Authority'}</h3>`;
+            if(data.name) html += `<p><strong>${languageSelect.value === 'hi' ? 'नाम' : 'Name'}:</strong> ${data.name}</p>`;
+            if(data.address) html += `<p><strong>${languageSelect.value === 'hi' ? 'पता' : 'Address'}:</strong> ${data.address}</p>`;
+            if(data.website) html += `<p><strong>${languageSelect.value === 'hi' ? 'वेबसाइट' : 'Website'}:</strong> <a href="${data.website}" target="_blank">${data.website}</a></p>`;
+            authorityOutput.innerHTML = html;
+        }
+
+        function setLoading(isLoading) {
+            btnText.textContent = isLoading ? 'Analyzing...' : 'Analyze';
+            loadingSpinner.classList.toggle('d-none', !isLoading);
+            simplifyBtn.disabled = isLoading;
+        }
+    </script>
+</body>
+</html>
